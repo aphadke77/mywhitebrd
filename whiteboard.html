@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Whiteboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #F5F0E8;
+    --surface: #FDFAF4;
+    --ink: #1A1814;
+    --ink-soft: #6B6560;
+    --accent: #C8490A;
+    --accent-light: #E8603A;
+    --border: #D8D0C4;
+    --tool-bg: #EFEAD8;
+    --shadow: rgba(26,24,20,0.12);
+  }
+
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    color: var(--ink);
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 20px;
+    background: var(--surface);
+    border-bottom: 1.5px solid var(--border);
+    z-index: 100;
+    flex-shrink: 0;
+  }
+
+  .logo {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .logo span { color: var(--accent); }
+
+  .divider { width: 1.5px; height: 32px; background: var(--border); }
+
+  /* ── Toolbar groups ── */
+  .toolbar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; flex: 1; }
+
+  .tool-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: var(--tool-bg);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 4px;
+  }
+
+  .tool-btn {
+    width: 36px; height: 36px;
+    border: none;
+    background: transparent;
+    border-radius: 7px;
+    cursor: pointer;
+    display: grid; place-items: center;
+    font-size: 17px;
+    color: var(--ink-soft);
+    transition: background .15s, color .15s, transform .1s;
+    position: relative;
+  }
+  .tool-btn:hover { background: var(--border); color: var(--ink); }
+  .tool-btn.active {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(200,73,10,.35);
+  }
+  .tool-btn:active { transform: scale(.92); }
+
+  /* tooltip */
+  .tool-btn[data-tip]::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: -30px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--ink);
+    color: #fff;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    padding: 3px 7px;
+    border-radius: 5px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .2s;
+    z-index: 200;
+  }
+  .tool-btn[data-tip]:hover::after { opacity: 1; }
+
+  /* colour swatches */
+  .swatch-wrap { display: flex; align-items: center; gap: 4px; padding: 0 4px; }
+  .swatch {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform .15s, border-color .15s;
+    flex-shrink: 0;
+  }
+  .swatch:hover { transform: scale(1.2); }
+  .swatch.active { border-color: var(--ink); transform: scale(1.15); }
+
+  .color-picker-wrap { position: relative; }
+  #colorPicker {
+    opacity: 0; position: absolute; inset: 0;
+    width: 100%; height: 100%; cursor: pointer;
+  }
+  .color-preview {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: 2px solid var(--ink);
+    pointer-events: none;
+  }
+
+  /* size slider */
+  .size-wrap { display: flex; align-items: center; gap: 6px; padding: 0 6px; }
+  .size-wrap label { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink-soft); }
+  #sizeSlider {
+    -webkit-appearance: none; appearance: none;
+    width: 80px; height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    outline: none; cursor: pointer;
+  }
+  #sizeSlider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--surface);
+    box-shadow: 0 1px 4px var(--shadow);
+  }
+  #sizeVal { font-family: 'DM Mono', monospace; font-size: 11px; min-width: 20px; }
+
+  /* opacity */
+  .opacity-wrap { display: flex; align-items: center; gap: 6px; padding: 0 6px; }
+  .opacity-wrap label { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink-soft); }
+  #opacitySlider {
+    -webkit-appearance: none; appearance: none;
+    width: 60px; height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    outline: none; cursor: pointer;
+  }
+  #opacitySlider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--surface);
+    box-shadow: 0 1px 4px var(--shadow);
+  }
+
+  /* right actions */
+  .actions { margin-left: auto; display: flex; gap: 8px; flex-shrink: 0; }
+
+  .btn {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    font-family: 'Syne', sans-serif;
+    font-size: 13px; font-weight: 600;
+    color: var(--ink);
+    cursor: pointer;
+    transition: all .15s;
+    white-space: nowrap;
+  }
+  .btn:hover { background: var(--tool-bg); border-color: var(--ink-soft); }
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .btn.primary:hover { background: var(--accent-light); border-color: var(--accent-light); }
+
+  /* ── Canvas area ── */
+  .canvas-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 1px 1px, #C8C0B0 1px, transparent 0);
+    background-size: 28px 28px;
+    background-color: var(--bg);
+  }
+
+  #board {
+    position: absolute;
+    top: 0; left: 0;
+    touch-action: none;
+    cursor: crosshair;
+  }
+  #board.erasing { cursor: cell; }
+  #board.selecting { cursor: default; }
+  #board.panning { cursor: grab; }
+  #board.panning:active { cursor: grabbing; }
+  #board.text-mode { cursor: text; }
+
+  /* text input overlay */
+  #textInput {
+    position: absolute;
+    border: 1.5px dashed var(--accent);
+    background: rgba(255,255,255,0.08);
+    font-family: 'Syne', sans-serif;
+    font-size: 20px;
+    outline: none;
+    min-width: 160px;
+    min-height: 36px;
+    padding: 4px 8px;
+    resize: none;
+    display: none;
+    z-index: 60;
+    line-height: 1.4;
+    overflow: hidden;
+    border-radius: 4px;
+    box-shadow: 0 2px 12px rgba(200,73,10,.18);
+  }
+
+  /* ── Post-it notes ── */
+  #postits-layer {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    z-index: 20;
+  }
+  .postit {
+    position: absolute;
+    width: 180px;
+    min-height: 160px;
+    border-radius: 4px 4px 4px 16px;
+    box-shadow: 3px 5px 18px rgba(26,24,20,.22), 0 1px 3px rgba(26,24,20,.1);
+    display: flex;
+    flex-direction: column;
+    pointer-events: all;
+    cursor: grab;
+    user-select: none;
+    transition: box-shadow .15s, transform .15s;
+    transform: rotate(var(--rot, 0deg));
+  }
+  .postit:hover { box-shadow: 6px 10px 28px rgba(26,24,20,.28); }
+  .postit.dragging { cursor: grabbing; box-shadow: 10px 16px 40px rgba(26,24,20,.35); transform: rotate(var(--rot,0deg)) scale(1.04); z-index: 99; }
+
+  .postit-header {
+    height: 32px;
+    border-radius: 4px 4px 0 0;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 8px;
+    background: rgba(0,0,0,.12);
+    flex-shrink: 0;
+    cursor: grab;
+  }
+  .postit-header span { font-family: 'DM Mono', monospace; font-size: 10px; color: rgba(0,0,0,.5); letter-spacing: .06em; }
+  .postit-del {
+    width: 18px; height: 18px;
+    border: none; background: rgba(0,0,0,.18);
+    border-radius: 50%; cursor: pointer;
+    font-size: 11px; color: rgba(0,0,0,.6);
+    display: grid; place-items: center;
+    transition: background .15s;
+    line-height: 1;
+  }
+  .postit-del:hover { background: rgba(180,30,30,.6); color: #fff; }
+
+  .postit-body {
+    flex: 1;
+    padding: 10px 12px;
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    border: none;
+    background: transparent;
+    resize: none;
+    outline: none;
+    color: rgba(0,0,0,.75);
+    cursor: text;
+    min-height: 128px;
+  }
+  .postit-body::placeholder { color: rgba(0,0,0,.3); }
+
+  /* post-it colour picker row */
+  .postit-colors {
+    display: flex; align-items: center; gap: 4px; padding: 0 4px;
+  }
+  .pi-swatch {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer; flex-shrink: 0;
+    transition: transform .15s, border-color .15s;
+  }
+  .pi-swatch:hover { transform: scale(1.2); }
+  .pi-swatch.active { border-color: var(--ink); transform: scale(1.15); }
+
+  /* status bar */
+  .statusbar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 5px 16px;
+    background: var(--surface);
+    border-top: 1.5px solid var(--border);
+    flex-shrink: 0;
+  }
+  .status-item {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+  }
+
+  /* PDF modal */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(26,24,20,.5);
+    backdrop-filter: blur(4px);
+    z-index: 300;
+    display: grid; place-items: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity .25s;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 32px;
+    width: 380px;
+    box-shadow: 0 16px 48px var(--shadow);
+    transform: translateY(12px);
+    transition: transform .25s;
+  }
+  .modal-overlay.open .modal { transform: translateY(0); }
+  .modal h2 { font-size: 20px; font-weight: 800; margin-bottom: 20px; }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-soft); margin-bottom: 6px; letter-spacing: .05em; text-transform: uppercase; }
+  .field select, .field input[type=text] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    background: var(--tool-bg);
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    color: var(--ink);
+    outline: none;
+  }
+  .field select:focus, .field input:focus { border-color: var(--accent); }
+  .modal-actions { display: flex; gap: 10px; margin-top: 24px; }
+  .modal-actions .btn { flex: 1; justify-content: center; }
+
+  /* folder picker */
+  .folder-row { display: flex; align-items: center; gap: 8px; }
+  .folder-row input[type=text] { flex:1; cursor:default; background:var(--bg) !important; color:var(--ink-soft) !important; }
+  .folder-row .btn { padding:8px 12px; font-size:12px; white-space:nowrap; flex-shrink:0; }
+  .folder-note { font-family:'DM Mono',monospace; font-size:10px; color:var(--ink-soft); margin-top:4px; line-height:1.5; }
+
+  /* toast */
+  .toast {
+    position: fixed;
+    bottom: 48px; left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--ink);
+    color: #fff;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    padding: 10px 20px;
+    border-radius: 8px;
+    opacity: 0;
+    pointer-events: none;
+    transition: all .3s;
+    z-index: 400;
+    white-space: nowrap;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- ── Header / Toolbar ── -->
+<header>
+  <div class="logo">White<span>Board</span></div>
+  <div class="divider"></div>
+
+  <div class="toolbar">
+
+    <!-- Draw tools -->
+    <div class="tool-group">
+      <button class="tool-btn active" id="penBtn" data-tip="Pen (P)" onclick="setTool('pen')">✏️</button>
+      <button class="tool-btn" id="highlightBtn" data-tip="Highlighter (H)" onclick="setTool('highlight')">🖊️</button>
+      <button class="tool-btn" id="eraserBtn" data-tip="Eraser (E)" onclick="setTool('eraser')">🧹</button>
+      <button class="tool-btn" id="textBtn" data-tip="Text (T)" onclick="setTool('text')">🔤</button>
+      <button class="tool-btn" id="postitBtn" data-tip="Post-it (N)" onclick="setTool('postit')">📝</button>
+    </div>
+
+    <!-- Shapes -->
+    <div class="tool-group">
+      <button class="tool-btn" id="lineBtn" data-tip="Line" onclick="setTool('line')">╱</button>
+      <button class="tool-btn" id="rectBtn" data-tip="Rectangle" onclick="setTool('rect')">▭</button>
+      <button class="tool-btn" id="circleBtn" data-tip="Circle" onclick="setTool('circle')">○</button>
+      <button class="tool-btn" id="arrowBtn" data-tip="Arrow" onclick="setTool('arrow')">➜</button>
+    </div>
+
+    <!-- Post-it colors (shown only when postit tool active) -->
+    <div class="tool-group" id="postitColorGroup" style="display:none">
+      <div class="postit-colors">
+        <div class="pi-swatch active" style="background:#FDE68A" data-picolor="#FDE68A" onclick="setPostitColor(this)"></div>
+        <div class="pi-swatch" style="background:#86EFAC" data-picolor="#86EFAC" onclick="setPostitColor(this)"></div>
+        <div class="pi-swatch" style="background:#93C5FD" data-picolor="#93C5FD" onclick="setPostitColor(this)"></div>
+        <div class="pi-swatch" style="background:#FCA5A5" data-picolor="#FCA5A5" onclick="setPostitColor(this)"></div>
+        <div class="pi-swatch" style="background:#C4B5FD" data-picolor="#C4B5FD" onclick="setPostitColor(this)"></div>
+        <div class="pi-swatch" style="background:#F9A8D4" data-picolor="#F9A8D4" onclick="setPostitColor(this)"></div>
+        <div class="pi-swatch" style="background:#FFFFFF" data-picolor="#FFFFFF" onclick="setPostitColor(this)"></div>
+      </div>
+    </div>
+
+    <!-- Colors -->
+    <div class="tool-group">
+      <div class="swatch-wrap" id="swatchWrap">
+        <div class="swatch active" style="background:#1A1814" data-color="#1A1814" onclick="setColor(this)"></div>
+        <div class="swatch" style="background:#C8490A" data-color="#C8490A" onclick="setColor(this)"></div>
+        <div class="swatch" style="background:#2563EB" data-color="#2563EB" onclick="setColor(this)"></div>
+        <div class="swatch" style="background:#16A34A" data-color="#16A34A" onclick="setColor(this)"></div>
+        <div class="swatch" style="background:#9333EA" data-color="#9333EA" onclick="setColor(this)"></div>
+        <div class="swatch" style="background:#E11D48" data-color="#E11D48" onclick="setColor(this)"></div>
+        <div class="swatch" style="background:#F59E0B" data-color="#F59E0B" onclick="setColor(this)"></div>
+      </div>
+      <div class="color-picker-wrap" style="position:relative;width:22px;height:22px;margin:0 4px">
+        <div class="color-preview" id="customColorPreview"></div>
+        <input type="color" id="colorPicker" value="#1A1814" oninput="setCustomColor(this.value)">
+      </div>
+    </div>
+
+    <!-- Size -->
+    <div class="tool-group">
+      <div class="size-wrap">
+        <label>SIZE</label>
+        <input type="range" id="sizeSlider" min="1" max="40" value="4" oninput="updateSize(this.value)">
+        <span id="sizeVal">4</span>
+      </div>
+    </div>
+
+    <!-- Opacity -->
+    <div class="tool-group">
+      <div class="opacity-wrap">
+        <label>OPACITY</label>
+        <input type="range" id="opacitySlider" min="10" max="100" value="100" oninput="updateOpacity(this.value)">
+      </div>
+    </div>
+
+    <!-- History -->
+    <div class="tool-group">
+      <button class="tool-btn" data-tip="Undo (Ctrl+Z)" onclick="undo()">↩</button>
+      <button class="tool-btn" data-tip="Redo (Ctrl+Y)" onclick="redo()">↪</button>
+    </div>
+
+    <!-- View -->
+    <div class="tool-group">
+      <button class="tool-btn" data-tip="Zoom In" onclick="zoom(1.2)">＋</button>
+      <button class="tool-btn" data-tip="Zoom Out" onclick="zoom(0.8)">－</button>
+      <button class="tool-btn" data-tip="Reset View" onclick="resetView()">⊡</button>
+    </div>
+
+    <!-- Clear -->
+    <div class="tool-group">
+      <button class="tool-btn" data-tip="Clear All" onclick="clearBoard()" style="font-size:14px">🗑️</button>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn" onclick="openPNGModal()">⬇ PNG</button>
+    <button class="btn primary" onclick="openPDFModal()">📄 Save as PDF</button>
+  </div>
+</header>
+
+<!-- ── Canvas ── -->
+<div class="canvas-wrap" id="canvasWrap">
+  <canvas id="board"></canvas>
+  <div id="postits-layer"></div>
+  <textarea id="textInput" rows="1" placeholder="Type here…" onkeydown="handleTextKey(event)"></textarea>
+</div>
+
+<!-- ── Status bar ── -->
+<div class="statusbar">
+  <div class="status-item" id="statusTool">Tool: Pen</div>
+  <div class="status-item" id="statusPos">X: 0  Y: 0</div>
+  <div class="status-item" id="statusZoom">Zoom: 100%</div>
+  <div class="status-item" id="statusStrokes">Strokes: 0</div>
+  <div class="status-item" id="statusPostits">Post-its: 0</div>
+</div>
+
+<!-- ── PDF Modal ── -->
+<div class="modal-overlay" id="pdfModal">
+  <div class="modal">
+    <h2>Save as PDF</h2>
+    <div class="field">
+      <label>File Name</label>
+      <input type="text" id="pdfName" value="whiteboard">
+    </div>
+    <div class="field">
+      <label>Save Location</label>
+      <div class="folder-row">
+        <input type="text" id="pdfFolderDisplay" value="Default Downloads folder" readonly>
+        <button class="btn" onclick="pickPDFFolder()">📁 Browse…</button>
+      </div>
+      <div class="folder-note" id="pdfFolderNote">Click Browse to choose a specific folder (Chrome/Edge only). Otherwise saves to your Downloads folder.</div>
+    </div>
+    <div class="field">
+      <label>Page Size</label>
+      <select id="pdfSize">
+        <option value="a4">A4 (210 × 297 mm)</option>
+        <option value="a3">A3 (297 × 420 mm)</option>
+        <option value="letter">US Letter (8.5 × 11 in)</option>
+        <option value="legal">US Legal (8.5 × 14 in)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Orientation</label>
+      <select id="pdfOrient">
+        <option value="landscape">Landscape</option>
+        <option value="portrait">Portrait</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Background</label>
+      <select id="pdfBg">
+        <option value="white">White</option>
+        <option value="cream">Cream (current)</option>
+        <option value="transparent">Transparent</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closePDFModal()">Cancel</button>
+      <button class="btn primary" onclick="savePDF()">Export PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── PNG Save Modal ── -->
+<div class="modal-overlay" id="pngModal">
+  <div class="modal">
+    <h2>Save as PNG</h2>
+    <div class="field">
+      <label>File Name</label>
+      <input type="text" id="pngName" value="whiteboard">
+    </div>
+    <div class="field">
+      <label>Save Location</label>
+      <div class="folder-row">
+        <input type="text" id="pngFolderDisplay" value="Default Downloads folder" readonly>
+        <button class="btn" onclick="pickPNGFolder()">📁 Browse…</button>
+      </div>
+      <div class="folder-note">Click Browse to choose a specific folder (Chrome/Edge only). Otherwise saves to your Downloads folder.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closePNGModal()">Cancel</button>
+      <button class="btn primary" onclick="savePNG()">Save PNG</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast ── -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+const canvas  = document.getElementById('board');
+const ctx     = canvas.getContext('2d');
+const wrap    = document.getElementById('canvasWrap');
+const textEl  = document.getElementById('textInput');
+
+let tool     = 'pen';
+let color    = '#1A1814';
+let size     = 4;
+let opacity  = 1;
+let drawing  = false;
+let scale    = 1;
+let offsetX  = 0, offsetY = 0;
+
+let history  = [];
+let redos    = [];
+let snapshots = []; // per-stroke image snapshots for shapes
+
+let strX = 0, strY = 0;  // shape start
+let strokeCount = 0;
+
+let textX = 0, textY = 0;
+
+// ── Post-it state ──────────────────────────────────────────────────────────
+let postitColor  = '#FDE68A';
+let postitCount  = 0;
+const POSTIT_COLORS = {
+  '#FDE68A': '#92400E',
+  '#86EFAC': '#14532D',
+  '#93C5FD': '#1E3A5F',
+  '#FCA5A5': '#7F1D1D',
+  '#C4B5FD': '#3B0764',
+  '#F9A8D4': '#831843',
+  '#FFFFFF': '#374151',
+};
+
+function setPostitColor(el) {
+  postitColor = el.dataset.picolor;
+  document.querySelectorAll('.pi-swatch').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function createPostit(x, y) {
+  postitCount++;
+  document.getElementById('statusPostits').textContent = 'Post-its: ' + postitCount;
+
+  const rot = (Math.random() * 6 - 3).toFixed(1);
+  const textColor = POSTIT_COLORS[postitColor] || '#374151';
+
+  const el = document.createElement('div');
+  el.className = 'postit';
+  el.style.cssText = `left:${x}px; top:${y}px; background:${postitColor}; --rot:${rot}deg;`;
+  el.dataset.id = 'pi-' + Date.now();
+
+  el.innerHTML = `
+    <div class="postit-header" data-drag="true">
+      <span>NOTE</span>
+      <button class="postit-del" title="Delete" onclick="deletePostit(this)">✕</button>
+    </div>
+    <textarea class="postit-body" placeholder="Write your note…" style="color:${textColor}"></textarea>
+  `;
+
+  // make draggable
+  makeDraggable(el);
+  document.getElementById('postits-layer').appendChild(el);
+  el.querySelector('.postit-body').focus();
+}
+
+function deletePostit(btn) {
+  btn.closest('.postit').remove();
+  postitCount = Math.max(0, postitCount - 1);
+  document.getElementById('statusPostits').textContent = 'Post-its: ' + postitCount;
+}
+
+function makeDraggable(el) {
+  const header = el.querySelector('[data-drag]');
+  let ox, oy, startX, startY, isDragging = false;
+
+  header.addEventListener('pointerdown', e => {
+    if (e.target.classList.contains('postit-del')) return;
+    isDragging = true;
+    el.classList.add('dragging');
+    el.style.zIndex = 90;
+    ox = parseInt(el.style.left) || 0;
+    oy = parseInt(el.style.top)  || 0;
+    startX = e.clientX; startY = e.clientY;
+    header.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+
+  header.addEventListener('pointermove', e => {
+    if (!isDragging) return;
+    el.style.left = (ox + e.clientX - startX) + 'px';
+    el.style.top  = (oy + e.clientY - startY) + 'px';
+  });
+
+  header.addEventListener('pointerup', () => {
+    isDragging = false;
+    el.classList.remove('dragging');
+    el.style.zIndex = '';
+  });
+}
+
+// Render post-its onto canvas (for export)
+async function renderPostitsToCanvas() {
+  const layer = document.getElementById('postits-layer');
+  const notes = layer.querySelectorAll('.postit');
+  const canvasRect = canvas.getBoundingClientRect();
+
+  for (const note of notes) {
+    const r = note.getBoundingClientRect();
+    const x = r.left - canvasRect.left;
+    const y = r.top  - canvasRect.top;
+    const w = r.width, h = r.height;
+    const rot = parseFloat(note.style.getPropertyValue('--rot') || '0') * Math.PI / 180;
+    const bgColor  = note.style.background;
+    const textarea = note.querySelector('.postit-body');
+    const txt      = textarea.value;
+    const txtColor = textarea.style.color || '#374151';
+
+    ctx.save();
+    ctx.translate(x + w/2, y + h/2);
+    ctx.rotate(rot);
+
+    // shadow
+    ctx.shadowColor = 'rgba(26,24,20,.2)';
+    ctx.shadowBlur = 12; ctx.shadowOffsetX = 3; ctx.shadowOffsetY = 5;
+
+    // body
+    ctx.fillStyle = bgColor;
+    ctx.beginPath();
+    ctx.roundRect(-w/2, -h/2, w, h, [4, 4, 4, 16]);
+    ctx.fill();
+    ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+
+    // header strip
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.beginPath();
+    ctx.roundRect(-w/2, -h/2, w, 32, [4, 4, 0, 0]);
+    ctx.fill();
+
+    // header label
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.font = '10px DM Mono, monospace';
+    ctx.fillText('NOTE', -w/2 + 8, -h/2 + 21);
+
+    // note text
+    if (txt) {
+      ctx.fillStyle = txtColor;
+      ctx.font = '600 14px Syne, sans-serif';
+      const lines = txt.split('\n');
+      lines.forEach((line, i) => {
+        ctx.fillText(line, -w/2 + 12, -h/2 + 32 + 20 + i * 22, w - 24);
+      });
+    }
+
+    ctx.restore();
+  }
+}
+
+
+// ── Resize ─────────────────────────────────────────────────────────────────
+function resize() {
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  const img = canvas.toDataURL();
+  canvas.width = w; canvas.height = h;
+  const i = new Image(); i.src = img;
+  i.onload = () => ctx.drawImage(i, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ── Tool helpers ───────────────────────────────────────────────────────────
+function setTool(t) {
+  tool = t;
+  document.querySelectorAll('.tool-btn[id]').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById(t + 'Btn');
+  if (btn) btn.classList.add('active');
+
+  canvas.className = '';
+  if (t === 'eraser')    canvas.classList.add('erasing');
+  else if (t === 'text') canvas.classList.add('text-mode');
+  else if (t === 'postit') canvas.classList.add('text-mode');
+
+  // show/hide postit color palette
+  document.getElementById('postitColorGroup').style.display = (t === 'postit') ? 'flex' : 'none';
+
+  document.getElementById('statusTool').textContent = 'Tool: ' + t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+function setColor(el) {
+  color = el.dataset.color;
+  document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('colorPicker').value = color;
+  document.getElementById('customColorPreview').style.background = color;
+}
+
+function setCustomColor(val) {
+  color = val;
+  document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+  document.getElementById('customColorPreview').style.background = val;
+}
+
+function updateSize(v) {
+  size = +v;
+  document.getElementById('sizeVal').textContent = v;
+}
+
+function updateOpacity(v) { opacity = +v / 100; }
+
+// ── Drawing helpers ────────────────────────────────────────────────────────
+function getPos(e) {
+  const r = canvas.getBoundingClientRect();
+  const src = e.touches ? e.touches[0] : e;
+  return { x: src.clientX - r.left, y: src.clientY - r.top };
+}
+
+function ctxSetup() {
+  ctx.lineWidth   = size;
+  ctx.lineCap     = 'round';
+  ctx.lineJoin    = 'round';
+  ctx.globalAlpha = opacity;
+
+  if (tool === 'eraser') {
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.strokeStyle = 'rgba(0,0,0,1)';
+  } else if (tool === 'highlight') {
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.4;
+  } else {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = color;
+  }
+}
+
+function saveSnap() {
+  history.push(canvas.toDataURL());
+  redos = [];
+  strokeCount++;
+  document.getElementById('statusStrokes').textContent = 'Strokes: ' + strokeCount;
+}
+
+// ── Pointer events ─────────────────────────────────────────────────────────
+canvas.addEventListener('pointerdown', e => {
+  if (e.button !== 0 && !e.touches) return;
+  const {x, y} = getPos(e);
+
+  if (tool === 'postit') {
+    createPostit(x - 90, y - 16);
+    return;
+  }
+
+  if (tool === 'text') {
+    // If textarea already open, commit it first
+    if (textEl.style.display === 'block') {
+      commitText();
+      return;
+    }
+    textX = x; textY = y;
+    const fs = size * 4 + 12;
+    textEl.style.display = 'block';
+    textEl.style.left = x + 'px';
+    textEl.style.top  = (y - fs) + 'px';   // offset so baseline aligns with click
+    textEl.style.fontSize = fs + 'px';
+    textEl.style.color = color;
+    textEl.value = '';
+    // auto-grow height
+    textEl.style.height = 'auto';
+    setTimeout(() => textEl.focus(), 0);
+    return;
+  }
+
+  drawing = true;
+  strX = x; strY = y;
+  saveSnap();
+  ctxSetup();
+
+  if (['pen','eraser','highlight'].includes(tool)) {
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  }
+});
+
+canvas.addEventListener('pointermove', e => {
+  const {x, y} = getPos(e);
+  document.getElementById('statusPos').textContent = `X: ${Math.round(x)}  Y: ${Math.round(y)}`;
+  if (!drawing) return;
+
+  ctxSetup();
+
+  if (['pen','eraser','highlight'].includes(tool)) {
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  } else {
+    // restore snapshot before redrawing shape preview
+    if (history.length) {
+      const img = new Image();
+      img.src = history[history.length - 1];
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.drawImage(img, 0, 0);
+    }
+    ctxSetup();
+    drawShape(tool, strX, strY, x, y);
+  }
+});
+
+canvas.addEventListener('pointerup', e => {
+  if (!drawing) return;
+  drawing = false;
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+});
+
+canvas.addEventListener('pointerleave', () => {
+  if (drawing) { drawing = false; }
+});
+
+// touch
+canvas.addEventListener('touchstart', e => { e.preventDefault(); canvas.dispatchEvent(new PointerEvent('pointerdown', {clientX: e.touches[0].clientX, clientY: e.touches[0].clientY})); }, {passive:false});
+canvas.addEventListener('touchmove',  e => { e.preventDefault(); canvas.dispatchEvent(new PointerEvent('pointermove', {clientX: e.touches[0].clientX, clientY: e.touches[0].clientY})); }, {passive:false});
+canvas.addEventListener('touchend',   e => { e.preventDefault(); canvas.dispatchEvent(new PointerEvent('pointerup', {})); }, {passive:false});
+
+// ── Shape drawing ──────────────────────────────────────────────────────────
+function drawShape(type, x1, y1, x2, y2) {
+  ctx.beginPath();
+  if (type === 'line') {
+    ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  } else if (type === 'rect') {
+    ctx.strokeRect(x1, y1, x2-x1, y2-y1);
+  } else if (type === 'circle') {
+    const cx = (x1+x2)/2, cy = (y1+y2)/2;
+    const rx = Math.abs(x2-x1)/2, ry = Math.abs(y2-y1)/2;
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI*2);
+    ctx.stroke();
+  } else if (type === 'arrow') {
+    const angle = Math.atan2(y2-y1, x2-x1);
+    const len = 16 + size;
+    ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - len*Math.cos(angle - Math.PI/6), y2 - len*Math.sin(angle - Math.PI/6));
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - len*Math.cos(angle + Math.PI/6), y2 - len*Math.sin(angle + Math.PI/6));
+    ctx.stroke();
+  }
+}
+
+// ── Text ───────────────────────────────────────────────────────────────────
+function commitText() {
+  const txt = textEl.value.trim();
+  if (txt) {
+    saveSnap();
+    const fs = size * 4 + 12;
+    ctx.globalAlpha = opacity;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = color;
+    ctx.font = `600 ${fs}px Syne, sans-serif`;
+    ctx.textBaseline = 'top';
+    txt.split('\n').forEach((line, i) => {
+      ctx.fillText(line, textX, textY - fs + i * (fs + 4));
+    });
+    ctx.textBaseline = 'alphabetic';
+    ctx.globalAlpha = 1;
+  }
+  textEl.style.display = 'none';
+  textEl.value = '';
+}
+
+function handleTextKey(e) {
+  if (e.key === 'Escape') {
+    textEl.style.display = 'none';
+    textEl.value = '';
+    e.preventDefault();
+  } else if (e.key === 'Enter' && !e.shiftKey) {
+    // Enter commits; Shift+Enter = newline
+    commitText();
+    e.preventDefault();
+  } else {
+    // auto-grow textarea
+    setTimeout(() => {
+      textEl.style.height = 'auto';
+      textEl.style.height = textEl.scrollHeight + 'px';
+    }, 0);
+  }
+}
+
+// ── Click outside textarea commits text ────────────────────────────────────
+wrap.addEventListener('pointerdown', e => {
+  if (textEl.style.display === 'block' && e.target !== textEl && tool === 'text') {
+    commitText();
+  }
+}, true); // capture phase so it runs before canvas pointerdown
+
+// ── History ────────────────────────────────────────────────────────────────
+function undo() {
+  if (!history.length) return;
+  redos.push(canvas.toDataURL());
+  const snap = history.pop();
+  const img = new Image(); img.src = snap;
+  img.onload = () => { ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0); };
+  strokeCount = Math.max(0, strokeCount-1);
+  document.getElementById('statusStrokes').textContent = 'Strokes: ' + strokeCount;
+}
+
+function redo() {
+  if (!redos.length) return;
+  history.push(canvas.toDataURL());
+  const snap = redos.pop();
+  const img = new Image(); img.src = snap;
+  img.onload = () => { ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0); };
+}
+
+// ── Zoom ───────────────────────────────────────────────────────────────────
+function zoom(factor) {
+  scale = Math.min(4, Math.max(0.25, scale * factor));
+  canvas.style.transform = `scale(${scale})`;
+  canvas.style.transformOrigin = 'top left';
+  document.getElementById('statusZoom').textContent = 'Zoom: ' + Math.round(scale*100) + '%';
+}
+
+function resetView() {
+  scale = 1;
+  canvas.style.transform = '';
+  document.getElementById('statusZoom').textContent = 'Zoom: 100%';
+}
+
+// ── Clear ──────────────────────────────────────────────────────────────────
+function clearBoard() {
+  if (!confirm('Clear the entire whiteboard?')) return;
+  saveSnap();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  strokeCount = 0;
+  document.getElementById('statusStrokes').textContent = 'Strokes: 0';
+}
+
+// ── PNG export ─────────────────────────────────────────────────────────────
+let pngFileHandle = null;
+
+function openPNGModal()  { document.getElementById('pngModal').classList.add('open'); }
+function closePNGModal() { document.getElementById('pngModal').classList.remove('open'); }
+
+async function pickPNGFolder() {
+  if (!window.showSaveFilePicker) {
+    showToast('Folder picker not supported in this browser');
+    return;
+  }
+  try {
+    const name = document.getElementById('pngName').value || 'whiteboard';
+    const handle = await window.showSaveFilePicker({
+      suggestedName: name + '.png',
+      types: [{ description: 'PNG Image', accept: { 'image/png': ['.png'] } }],
+    });
+    pngFileHandle = handle;
+    // Show path hint — browsers only expose the file name for privacy
+    document.getElementById('pngFolderDisplay').value = '📁 ' + handle.name;
+  } catch (e) {
+    if (e.name !== 'AbortError') showToast('Could not open folder picker');
+  }
+}
+
+async function savePNG() {
+  await renderPostitsToCanvas();
+  const name = document.getElementById('pngName').value || 'whiteboard';
+
+  canvas.toBlob(async blob => {
+    if (pngFileHandle) {
+      // Write to chosen location
+      try {
+        const writable = await pngFileHandle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        pngFileHandle = null;
+        document.getElementById('pngFolderDisplay').value = 'Default Downloads folder';
+        closePNGModal();
+        showToast('PNG saved to chosen folder ✓');
+      } catch (e) {
+        showToast('Save failed: ' + e.message);
+      }
+    } else if (window.showSaveFilePicker) {
+      // Prompt picker inline
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: name + '.png',
+          types: [{ description: 'PNG Image', accept: { 'image/png': ['.png'] } }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        closePNGModal();
+        showToast('PNG saved to chosen folder ✓');
+      } catch (e) {
+        if (e.name !== 'AbortError') showToast('Save cancelled');
+      }
+    } else {
+      // Fallback: default download
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = name + '.png'; a.click();
+      URL.revokeObjectURL(url);
+      closePNGModal();
+      showToast('PNG saved to Downloads ✓');
+    }
+  }, 'image/png');
+}
+
+// ── PDF modal ─────────────────────────────────────────────────────────────
+let pdfFileHandle = null;
+
+function openPDFModal()  { document.getElementById('pdfModal').classList.add('open'); }
+function closePDFModal() { document.getElementById('pdfModal').classList.remove('open'); }
+
+async function pickPDFFolder() {
+  if (!window.showSaveFilePicker) {
+    showToast('Folder picker not supported in this browser');
+    return;
+  }
+  try {
+    const name = document.getElementById('pdfName').value || 'whiteboard';
+    const handle = await window.showSaveFilePicker({
+      suggestedName: name + '.pdf',
+      types: [{ description: 'PDF Document', accept: { 'application/pdf': ['.pdf'] } }],
+    });
+    pdfFileHandle = handle;
+    document.getElementById('pdfFolderDisplay').value = '📁 ' + handle.name;
+    document.getElementById('pdfFolderNote').textContent = 'Save location selected. Click Export PDF to write the file.';
+  } catch (e) {
+    if (e.name !== 'AbortError') showToast('Could not open folder picker');
+  }
+}
+
+async function savePDF() {
+  const { jsPDF } = window.jspdf;
+  const pgSize = document.getElementById('pdfSize').value;
+  const orient = document.getElementById('pdfOrient').value;
+  const bg     = document.getElementById('pdfBg').value;
+  const name   = document.getElementById('pdfName').value || 'whiteboard';
+
+  await renderPostitsToCanvas();
+
+  const doc = new jsPDF({ orientation: orient, unit: 'mm', format: pgSize });
+  const pw  = doc.internal.pageSize.getWidth();
+  const ph  = doc.internal.pageSize.getHeight();
+
+  if (bg === 'white') { doc.setFillColor(255,255,255); doc.rect(0,0,pw,ph,'F'); }
+  else if (bg === 'cream') { doc.setFillColor(245,240,232); doc.rect(0,0,pw,ph,'F'); }
+
+  const imgData = canvas.toDataURL('image/png');
+  const cw = canvas.width, ch = canvas.height;
+  const ratio = Math.min(pw/cw, ph/ch);
+  const iw = cw*ratio, ih = ch*ratio;
+  doc.addImage(imgData, 'PNG', (pw-iw)/2, (ph-ih)/2, iw, ih);
+
+  const pdfBlob = doc.output('blob');
+
+  if (pdfFileHandle) {
+    // Write to pre-chosen file
+    try {
+      const writable = await pdfFileHandle.createWritable();
+      await writable.write(pdfBlob);
+      await writable.close();
+      pdfFileHandle = null;
+      document.getElementById('pdfFolderDisplay').value = 'Default Downloads folder';
+      document.getElementById('pdfFolderNote').textContent = 'Click Browse to choose a specific folder (Chrome/Edge only). Otherwise saves to your Downloads folder.';
+      closePDFModal();
+      showToast('PDF saved to chosen folder ✓');
+    } catch (e) {
+      showToast('Save failed: ' + e.message);
+    }
+  } else if (window.showSaveFilePicker) {
+    // Prompt picker now
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: name + '.pdf',
+        types: [{ description: 'PDF Document', accept: { 'application/pdf': ['.pdf'] } }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(pdfBlob);
+      await writable.close();
+      closePDFModal();
+      showToast('PDF saved to chosen folder ✓');
+    } catch (e) {
+      if (e.name !== 'AbortError') showToast('Save cancelled');
+    }
+  } else {
+    // Fallback: auto-download to Downloads
+    doc.save(name + '.pdf');
+    closePDFModal();
+    showToast('PDF saved to Downloads ✓');
+  }
+}
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ── Keyboard shortcuts ─────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (textEl.style.display === 'block') return;
+  if (e.target.classList.contains('postit-body')) return;
+  if (e.ctrlKey || e.metaKey) {
+    if (e.key === 'z') { e.preventDefault(); undo(); }
+    if (e.key === 'y') { e.preventDefault(); redo(); }
+    if (e.key === 's') { e.preventDefault(); openPDFModal(); }
+    return;
+  }
+  switch(e.key.toLowerCase()) {
+    case 'p': setTool('pen'); break;
+    case 'h': setTool('highlight'); break;
+    case 'e': setTool('eraser'); break;
+    case 't': setTool('text'); break;
+    case 'n': setTool('postit'); break;
+  }
+});
+
+// ── Init ───────────────────────────────────────────────────────────────────
+document.getElementById('customColorPreview').style.background = color;
+</script>
+</body>
+</html>
